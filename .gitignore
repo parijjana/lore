@@ -1,0 +1,5 @@
+node_modules
+.env
+lessons_archive.jsonl
+*.log
+package-lock.json
