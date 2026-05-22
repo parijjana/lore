@@ -220,7 +220,7 @@ You are connected to a "Lore" Knowledge Archive. Follow these rules:
             stats[cat][l.type]++;
         });
         const summary = Object.entries(stats).map(([cat, s]) => 
-            `- **${cat.toUpperCase()}**: ${s.total} total (${s.raw} raw, ${s.synthesized} synthesized). ${s.raw >= 5 ? "⚠️ Fragmentation High - Recommend Synthesis." : "✅ Healthy"}`
+            `- **${cat.toUpperCase()}**: ${s.total} total (${s.raw} raw, ${s.synthesized} synthesized). ${s.raw >= 5 ? "️ Fragmentation High - Recommend Synthesis." : " Healthy"}`
         ).join("\n");
         return { content: [{ type: "text", text: `Lore Health Status:\n\n${summary}` }] };
     }
