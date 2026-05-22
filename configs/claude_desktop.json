@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "lore": {
+      "command": "node",
+      "args": [
+        "PATH_TO_LORE/index.js"
+      ]
+    }
+  }
+}

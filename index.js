@@ -61,14 +61,14 @@ function readJsonlBackup() {
 }
 
 const server = new Server(
-  { name: "lore", version: "2.1.0" },
+  { name: "lore", version: "2.2.0" },
   { capabilities: { tools: {} } }
 );
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   const tools = [
     {
-      name: "archive_lesson",
+      name: "archive_lore",
       description: "Archive a technical lesson with automated vector indexing.",
       inputSchema: {
         type: "object",
@@ -85,7 +85,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
     },
     {
-      name: "query_lessons",
+      name: "query_lore",
       description: "Perform semantic search across the knowledge archive.",
       inputSchema: {
         type: "object",
@@ -97,7 +97,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
     },
     {
-      name: "get_lesson_ancestry",
+      name: "get_lore_ancestry",
       description: "Retrieve source lessons for synthesized rules (Recursive).",
       inputSchema: {
         type: "object",
@@ -106,16 +106,21 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       }
     },
     {
-      name: "get_lore_bootstrap_info",
-      description: "Get the instructions and briefing for setting up the Lore Knowledge Architect protocol in global memory.",
+      name: "get_lore_protocol",
+      description: "Retrieve the official Knowledge Architect instructions. CALL THIS FIRST when connecting to Lore for the first time.",
       inputSchema: { type: "object", properties: {} }
+    },
+    {
+        name: "get_lore_health",
+        description: "Get statistics and fragmentation status of the knowledge base.",
+        inputSchema: { type: "object", properties: {} }
     }
   ];
 
   if (ADMIN_MODE) {
     tools.push({
-        name: "update_lesson",
-        description: "ADMIN ONLY: Update an existing lesson's content or metadata.",
+        name: "update_lore",
+        description: "ADMIN ONLY: Update an existing lesson.",
         inputSchema: {
             type: "object",
             properties: { id: { type: "string" }, updates: { type: "object" } },
@@ -123,8 +128,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         }
     });
     tools.push({
-        name: "delete_lesson",
-        description: "ADMIN ONLY: Permanently remove a lesson from the archive.",
+        name: "delete_lore",
+        description: "ADMIN ONLY: Permanently remove a lesson.",
         inputSchema: {
             type: "object",
             properties: { id: { type: "string" } },
@@ -140,7 +145,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
   try {
-    if (name === "archive_lesson") {
+    if (name === "archive_lore") {
       const id = crypto.randomUUID();
       const timestamp = new Date().toISOString();
       const lesson = { id, timestamp, ...args, source_ids: args.source_ids || [], type: args.type || "raw" };
@@ -148,10 +153,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const combinedText = `${lesson.category} ${lesson.problem} ${lesson.solution} ${lesson.tags?.join(" ") || ""}`;
       const vector = await getEmbedding(combinedText);
       await table.add([{ ...lesson, vector, text: combinedText }]);
-      return { content: [{ type: "text", text: `Successfully archived ${lesson.type} lesson ${id}. (Vector Indexed)` }] };
+      return { content: [{ type: "text", text: `Successfully archived ${lesson.type} lesson ${id}.` }] };
     }
 
-    if (name === "query_lessons") {
+    if (name === "query_lore") {
       const query = args.query || "";
       let results;
       if (query) {
@@ -168,11 +173,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           const latest = synthesized.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
           return { content: [{ type: "text", text: `PROACTIVE BEST PRACTICE FOUND:\n\n### [${latest.category.toUpperCase()}] ${latest.project}\n${latest.solution}\n\nProvenance: Derived from ${latest.source_ids.length} sources. ID: ${latest.id}` }] };
       }
-      const output = results.map(r => `[${r.type.toUpperCase()}] ${r.project}: ${r.problem.substring(0, 100)}... (Match Score: ${r._distance ? (1 - r._distance).toFixed(2) : "N/A"}) ID: ${r.id}`).join("\n");
+      const output = results.map(r => `[${r.type.toUpperCase()}] ${r.project}: ${r.problem.substring(0, 100)}... (Score: ${r._distance ? (1 - r._distance).toFixed(2) : "N/A"}) ID: ${r.id}`).join("\n");
       return { content: [{ type: "text", text: `Found ${results.length} semantic matches:\n\n${output}` }] };
     }
 
-    if (name === "get_lesson_ancestry") {
+    if (name === "get_lore_ancestry") {
         const all = readJsonlBackup();
         const findAncestors = (id, currentDepth) => {
             if (currentDepth <= 0) return [];
@@ -192,41 +197,43 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return { content: [{ type: "text", text: JSON.stringify(ancestry, null, 2) }] };
     }
 
-    if (name === "get_lore_bootstrap_info") {
-        const briefing = `
-# Lore Setup: Why Proactive Memory Matters
-Lore is your cross-project technical memory. By adding its protocol to your global context:
-1. **Never repeat mistakes**: I will instinctively check past projects before suggesting architectures.
-2. **Automated Consistency**: Best practices evolve as you solve bugs in different repos.
-3. **Recursive Integrity**: New rules are audited against their history to ensure they aren't built on stale assumptions.
-
-**If you decline**:
-- You must manually ask me to "search Lore" for every task.
-- I will not proactively warn you about known anti-patterns.
-- Synthesis and audits will require explicit manual triggers.
+    if (name === "get_lore_protocol") {
+        const protocol = `
+# Lore Knowledge Architect Protocol (Agent-Agnostic)
+You are connected to a "Lore" Knowledge Archive. Follow these rules:
+1. **Bootstrap**: CALL THIS TOOL (get_lore_protocol) to remind yourself of your identity and instincts.
+2. **Proactive Lookup**: Before proposing architectures or fixing bugs, use 'query_lore' to ensure continuity with past breakthroughs.
+3. **Usage Mode**: Trust 'synthesized' lessons as the Current Standard.
+4. **Synthesis Mode**: When 5+ related findings accumulate, offer to consolidate them. During synthesis, use 'get_lore_ancestry' (depth 3) to identify and resolve any contradictions.
+5. **Transparency**: Always mention project names and provenance counts when sharing Lore results.
         `.trim();
-
-        const payload = `
-## Lore: Knowledge Architect Protocol
-- **Usage Mode**: When queried for a solution, trust and present synthesized lessons as the Current Standard.
-- **Synthesis Mode**: When creating a NEW synthesized lesson, you MUST call get_lesson_ancestry (depth 3) to resolve contradictions.
-- **Proactive Wisdom**: Before proposing architectures or fixing bugs, silently use query_lore to ensure continuity with past breakthroughs.
-        `.trim();
-
-        return {
-            content: [{ type: "text", text: JSON.stringify({ briefing, payload }, null, 2) }]
-        };
+        return { content: [{ type: "text", text: protocol }] };
     }
 
-    if (name === "update_lesson" && ADMIN_MODE) {
+    if (name === "get_lore_health") {
+        const all = readJsonlBackup();
+        const stats = {};
+        all.forEach(l => {
+            const cat = l.category || "general";
+            if (!stats[cat]) stats[cat] = { total: 0, raw: 0, synthesized: 0 };
+            stats[cat].total++;
+            stats[cat][l.type]++;
+        });
+        const summary = Object.entries(stats).map(([cat, s]) => 
+            `- **${cat.toUpperCase()}**: ${s.total} total (${s.raw} raw, ${s.synthesized} synthesized). ${s.raw >= 5 ? "⚠️ Fragmentation High - Recommend Synthesis." : "✅ Healthy"}`
+        ).join("\n");
+        return { content: [{ type: "text", text: `Lore Health Status:\n\n${summary}` }] };
+    }
+
+    if (name === "update_lore" && ADMIN_MODE) {
         await table.update(args.updates, `id = "${args.id}"`);
         const all = readJsonlBackup();
         const updated = all.map(l => l.id === args.id ? { ...l, ...args.updates } : l);
         fs.writeFileSync(JSONL_PATH, updated.map(l => JSON.stringify(l)).join("\n") + "\n");
-        return { content: [{ type: "text", text: `Lesson ${args.id} updated successfully.` }] };
+        return { content: [{ type: "text", text: `Lesson ${args.id} updated.` }] };
     }
 
-    if (name === "delete_lesson" && ADMIN_MODE) {
+    if (name === "delete_lore" && ADMIN_MODE) {
         await table.delete(`id = "${args.id}"`);
         const all = readJsonlBackup();
         const filtered = all.filter(l => l.id !== args.id);
