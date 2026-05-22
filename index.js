@@ -1,4 +1,4 @@
-const { Server } = require("@modelcontextprotocol/sdk/server/index.js");
+﻿const { Server } = require("@modelcontextprotocol/sdk/server/index.js");
 const { StdioServerTransport } = require("@modelcontextprotocol/sdk/server/stdio.js");
 const { CallToolRequestSchema, ListToolsRequestSchema } = require("@modelcontextprotocol/sdk/types.js");
 const fs = require("fs");
@@ -24,27 +24,17 @@ const ADMIN_MODE = process.env.KNOWLEDGE_ADMIN_MODE === 'true';
 
 let db, table, embedder;
 
-/**
- * Initialize storage and embedding model
- */
 async function init() {
     if (!fs.existsSync(path.dirname(JSONL_PATH))) {
         fs.mkdirSync(path.dirname(JSONL_PATH), { recursive: true });
     }
-
-    // Load Local Embedding Model (all-MiniLM-L6-v2 is small and fast)
     embedder = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
-
-    // Connect to LanceDB
     db = await lancedb.connect(LANCE_DIR);
-    
-    // Check if table exists, or create it
     const tableNames = await db.tableNames();
     if (!tableNames.includes("lessons")) {
-        // Initial empty creation
         table = await db.createTable("lessons", [{
             id: "initial",
-            vector: Array(384).fill(0), // all-MiniLM-L6-v2 has 384 dimensions
+            vector: Array(384).fill(0),
             text: "",
             project: "",
             category: "",
@@ -54,34 +44,24 @@ async function init() {
             source_ids: [],
             timestamp: new Date().toISOString()
         }]);
-        // Delete initial dummy
         await table.delete('id = "initial"');
     } else {
         table = await db.openTable("lessons");
     }
 }
 
-/**
- * Utility: Generate Embedding
- */
 async function getEmbedding(text) {
     const output = await embedder(text, { pooling: 'mean', normalize: true });
     return Array.from(output.data);
 }
 
-/**
- * Utility: Read JSONL Backup (Safe read)
- */
 function readJsonlBackup() {
     if (!fs.existsSync(JSONL_PATH)) return [];
-    return fs.readFileSync(JSONL_PATH, "utf8")
-        .split("\n")
-        .filter(l => l.trim())
-        .map(l => JSON.parse(l));
+    return fs.readFileSync(JSONL_PATH, "utf8").split("\n").filter(l => l.trim()).map(l => JSON.parse(l));
 }
 
 const server = new Server(
-  { name: "lore", version: "2.0.0" },
+  { name: "lore", version: "2.1.0" },
   { capabilities: { tools: {} } }
 );
 
@@ -124,20 +104,21 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         properties: { lesson_id: { type: "string" }, max_depth: { type: "number", default: 3 } },
         required: ["lesson_id"]
       }
+    },
+    {
+      name: "get_lore_bootstrap_info",
+      description: "Get the instructions and briefing for setting up the Lore Knowledge Architect protocol in global memory.",
+      inputSchema: { type: "object", properties: {} }
     }
   ];
 
-  // Hidden tools for Admin Mode
   if (ADMIN_MODE) {
     tools.push({
         name: "update_lesson",
         description: "ADMIN ONLY: Update an existing lesson's content or metadata.",
         inputSchema: {
             type: "object",
-            properties: {
-                id: { type: "string" },
-                updates: { type: "object" }
-            },
+            properties: { id: { type: "string" }, updates: { type: "object" } },
             required: ["id", "updates"]
         }
     });
@@ -163,39 +144,30 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const id = crypto.randomUUID();
       const timestamp = new Date().toISOString();
       const lesson = { id, timestamp, ...args, source_ids: args.source_ids || [], type: args.type || "raw" };
-
-      // 1. Save to JSONL (Backup)
       fs.appendFileSync(JSONL_PATH, JSON.stringify(lesson) + "\n", "utf8");
-
-      // 2. Index in LanceDB (Semantic)
       const combinedText = `${lesson.category} ${lesson.problem} ${lesson.solution} ${lesson.tags?.join(" ") || ""}`;
       const vector = await getEmbedding(combinedText);
       await table.add([{ ...lesson, vector, text: combinedText }]);
-
       return { content: [{ type: "text", text: `Successfully archived ${lesson.type} lesson ${id}. (Vector Indexed)` }] };
     }
 
     if (name === "query_lessons") {
       const query = args.query || "";
       let results;
-
       if (query) {
           const vector = await getEmbedding(query);
           results = await table.search(vector).limit(10).execute();
       } else {
           results = await table.select().limit(10).execute();
       }
-
       if (args.category) {
           results = results.filter(r => r.category.toLowerCase() === args.category.toLowerCase());
       }
-
       const synthesized = results.filter(r => r.type === "synthesized");
       if (synthesized.length > 0 && !args.include_raw) {
           const latest = synthesized.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
           return { content: [{ type: "text", text: `PROACTIVE BEST PRACTICE FOUND:\n\n### [${latest.category.toUpperCase()}] ${latest.project}\n${latest.solution}\n\nProvenance: Derived from ${latest.source_ids.length} sources. ID: ${latest.id}` }] };
       }
-
       const output = results.map(r => `[${r.type.toUpperCase()}] ${r.project}: ${r.problem.substring(0, 100)}... (Match Score: ${r._distance ? (1 - r._distance).toFixed(2) : "N/A"}) ID: ${r.id}`).join("\n");
       return { content: [{ type: "text", text: `Found ${results.length} semantic matches:\n\n${output}` }] };
     }
@@ -220,11 +192,34 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return { content: [{ type: "text", text: JSON.stringify(ancestry, null, 2) }] };
     }
 
+    if (name === "get_lore_bootstrap_info") {
+        const briefing = `
+# Lore Setup: Why Proactive Memory Matters
+Lore is your cross-project technical memory. By adding its protocol to your global context:
+1. **Never repeat mistakes**: I will instinctively check past projects before suggesting architectures.
+2. **Automated Consistency**: Best practices evolve as you solve bugs in different repos.
+3. **Recursive Integrity**: New rules are audited against their history to ensure they aren't built on stale assumptions.
+
+**If you decline**:
+- You must manually ask me to "search Lore" for every task.
+- I will not proactively warn you about known anti-patterns.
+- Synthesis and audits will require explicit manual triggers.
+        `.trim();
+
+        const payload = `
+## Lore: Knowledge Architect Protocol
+- **Usage Mode**: When queried for a solution, trust and present synthesized lessons as the Current Standard.
+- **Synthesis Mode**: When creating a NEW synthesized lesson, you MUST call get_lesson_ancestry (depth 3) to resolve contradictions.
+- **Proactive Wisdom**: Before proposing architectures or fixing bugs, silently use query_lore to ensure continuity with past breakthroughs.
+        `.trim();
+
+        return {
+            content: [{ type: "text", text: JSON.stringify({ briefing, payload }, null, 2) }]
+        };
+    }
+
     if (name === "update_lesson" && ADMIN_MODE) {
-        // Implementation for pruning/updating (Advanced)
-        // 1. Update LanceDB
         await table.update(args.updates, `id = "${args.id}"`);
-        // 2. Re-write JSONL (Simplified for now: Full rewrite)
         const all = readJsonlBackup();
         const updated = all.map(l => l.id === args.id ? { ...l, ...args.updates } : l);
         fs.writeFileSync(JSONL_PATH, updated.map(l => JSON.stringify(l)).join("\n") + "\n");
