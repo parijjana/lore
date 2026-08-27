@@ -1,3 +1,10 @@
-node_modules/
+node_modules
+.env
+*.log
+package-lock.json
+
+# The vector index is disposable — reindex.js rebuilds it from the JSONL.
 *.lance/
+# The archive itself is machine-local data, not source.
 lore_archive.jsonl
+lessons_archive.jsonl
