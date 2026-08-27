@@ -1,10 +1,12 @@
 {
   "name": "lore",
   "version": "1.0.0",
-  "description": "",
+  "description": "Technical-findings MCP server: semantic search over distilled engineering lessons.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node smoke-test.js",
+    "reindex": "node reindex.js",
+    "harvest": "node harvest.js"
   },
   "keywords": [],
   "author": "",

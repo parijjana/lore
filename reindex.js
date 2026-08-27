@@ -9,9 +9,7 @@ async function reindex() {
     const { pipeline } = require("@xenova/transformers");
     const lancedb = require("@lancedb/lancedb");
     
-    const DEFAULT_HOME = path.join(os.homedir(), ".gemini");
-    const JSONL_PATH = path.join(DEFAULT_HOME, "lore_archive.jsonl");
-    const LANCE_DIR = path.join(DEFAULT_HOME, "lore.lance");
+    const { JSONL_PATH, LANCE_DIR } = require("./paths.js");
 
     if (!fs.existsSync(JSONL_PATH)) {
         console.log("No JSONL file found to re-index.");

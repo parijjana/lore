@@ -1,5 +1,3 @@
-node_modules
-.env
-lessons_archive.jsonl
-*.log
-package-lock.json
+node_modules/
+*.lance/
+lore_archive.jsonl

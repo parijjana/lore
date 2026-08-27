@@ -17,9 +17,7 @@ try {
     console.error("Error loading dependencies. Ensure @lancedb/lancedb and @xenova/transformers are installed.");
 }
 
-const DEFAULT_HOME = path.join(os.homedir(), ".gemini");
-const JSONL_PATH = process.env.LORE_ARCHIVE_PATH || path.join(DEFAULT_HOME, "lore_archive.jsonl");
-const LANCE_DIR = path.join(path.dirname(JSONL_PATH), "lore.lance");
+const { JSONL_PATH, LANCE_DIR } = require("./paths.js");
 const ADMIN_MODE = process.env.KNOWLEDGE_ADMIN_MODE === 'true';
 
 let db, table, embedder;
@@ -41,7 +39,8 @@ async function init() {
             problem: "",
             solution: "",
             type: "raw",
-            source_ids: [],
+            source_ids: ["none"],
+            tags: ["none"],
             timestamp: new Date().toISOString()
         }]);
         await table.delete('id = "initial"');
@@ -53,6 +52,11 @@ async function init() {
 async function getEmbedding(text) {
     const output = await embedder(text, { pooling: 'mean', normalize: true });
     return Array.from(output.data);
+}
+
+// LanceDB filters are SQL strings; ids and categories reach them from tool arguments.
+function sqlString(value) {
+    return `'${String(value).replace(/'/g, "''")}'`;
 }
 
 function readJsonlBackup() {
@@ -92,7 +96,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         properties: {
           query: { type: "string", description: "Search by meaning or intent." },
           category: { type: "string" },
-          include_raw: { type: "boolean", default: false }
+          include_raw: { type: "boolean", default: false },
+          limit: { type: "number", default: 10 }
         }
       },
     },
@@ -158,22 +163,36 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     if (name === "query_lore") {
       const query = args.query || "";
-      let results;
+      const limit = args.limit || 10;
+      // Category is filtered in the query, not after it: filtering a limited result
+      // set silently hides matches that sit deeper in the index.
+      const filter = args.category
+          ? `lower(category) = ${sqlString(args.category.toLowerCase())}`
+          : null;
+      let builder;
       if (query) {
           const vector = await getEmbedding(query);
-          results = await table.search(vector).limit(10).execute();
+          builder = table.search(vector);
       } else {
-          results = await table.select().limit(10).execute();
+          builder = table.query();
       }
-      if (args.category) {
-          results = results.filter(r => r.category.toLowerCase() === args.category.toLowerCase());
-      }
+      if (filter) builder = builder.where(filter);
+      const results = await builder.limit(limit).toArray();
       const synthesized = results.filter(r => r.type === "synthesized");
       if (synthesized.length > 0 && !args.include_raw) {
-          const latest = synthesized.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
-          return { content: [{ type: "text", text: `PROACTIVE BEST PRACTICE FOUND:\n\n### [${latest.category.toUpperCase()}] ${latest.project}\n${latest.solution}\n\nProvenance: Derived from ${latest.source_ids.length} sources. ID: ${latest.id}` }] };
+          // Pick the best MATCH, not the newest entry. Results arrive distance-sorted, so
+          // the first synthesized hit is the closest one; timestamp only breaks ties (and
+          // is the only signal available when there is no query vector at all). Sorting by
+          // timestamp alone returned whichever lesson was written last, for every query.
+          const best = synthesized.sort((a, b) => {
+              const da = a._distance, db = b._distance;
+              if (da !== undefined && db !== undefined && da !== db) return da - db;
+              return new Date(b.timestamp) - new Date(a.timestamp);
+          })[0];
+          const headline = (best.problem || "").split("\n")[0];
+          return { content: [{ type: "text", text: `PROACTIVE BEST PRACTICE FOUND:\n\n### [${(best.category || "general").toUpperCase()}] ${headline}\n\n${best.solution}\n\nProvenance: ${best.project}, derived from ${best.source_ids.length} sources. ID: ${best.id}` }] };
       }
-      const output = results.map(r => `[${r.type.toUpperCase()}] ${r.project}: ${r.problem.substring(0, 100)}... (Score: ${r._distance ? (1 - r._distance).toFixed(2) : "N/A"}) ID: ${r.id}`).join("\n");
+      const output = results.map(r => `[${(r.type || "raw").toUpperCase()}] ${r.project}: ${(r.problem || "").substring(0, 100)}... (Score: ${r._distance ? (1 - r._distance).toFixed(2) : "N/A"}) ID: ${r.id}`).join("\n");
       return { content: [{ type: "text", text: `Found ${results.length} semantic matches:\n\n${output}` }] };
     }
 
@@ -226,7 +245,7 @@ You are connected to a "Lore" Knowledge Archive. Follow these rules:
     }
 
     if (name === "update_lore" && ADMIN_MODE) {
-        await table.update(args.updates, `id = "${args.id}"`);
+        await table.update(args.updates, `id = ${sqlString(args.id)}`);
         const all = readJsonlBackup();
         const updated = all.map(l => l.id === args.id ? { ...l, ...args.updates } : l);
         fs.writeFileSync(JSONL_PATH, updated.map(l => JSON.stringify(l)).join("\n") + "\n");
@@ -234,7 +253,7 @@ You are connected to a "Lore" Knowledge Archive. Follow these rules:
     }
 
     if (name === "delete_lore" && ADMIN_MODE) {
-        await table.delete(`id = "${args.id}"`);
+        await table.delete(`id = ${sqlString(args.id)}`);
         const all = readJsonlBackup();
         const filtered = all.filter(l => l.id !== args.id);
         fs.writeFileSync(JSONL_PATH, filtered.map(l => JSON.stringify(l)).join("\n") + "\n");

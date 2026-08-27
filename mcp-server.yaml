@@ -1,0 +1,51 @@
+schema_version: 1
+id: lore
+name: Lore
+version: 2.2.0
+description: Technical-findings archive — semantic search over distilled engineering lessons.
+
+enabled: true
+autostart: false
+restart_policy: on_failure
+
+lifecycle:
+  type: command_per_client
+
+entrypoint:
+  type: command
+  command: node
+  args:
+    - index.js
+  working_directory: .
+
+transport:
+  type: stdio
+
+scripts:
+  test: smoke-test.js
+
+health:
+  type: mcp_initialize
+  # Cold start loads the Xenova/all-MiniLM-L6-v2 embedding model before serving,
+  # so the handshake is slow on first run. 5s (Karst's value) times out here.
+  timeout_seconds: 30
+
+ports: []
+
+env:
+  # The archive JSONL is the durable copy; lore.lance beside it is a disposable
+  # index that reindex.js rebuilds. Defaults to ~/.lore/ when unset.
+  LORE_ARCHIVE_PATH:
+    from_env: LORE_ARCHIVE_PATH
+    required: false
+  KNOWLEDGE_ADMIN_MODE:
+    from_env: KNOWLEDGE_ADMIN_MODE
+    required: false
+
+metadata:
+  repository: https://github.com/parijjana/lore
+  license: ISC
+  tags:
+    - knowledge
+    - lessons
+    - semantic-search

@@ -1,6 +1,11 @@
 # Lore
 
-A cross-project technical knowledge management system for the Gemini CLI, now powered by **LanceDB Semantic Search**. This tool allows your AI agents to archive and query technical lessons learned across different workspaces, creating a persistent, high-intelligence "global memory."
+A cross-project technical knowledge archive, exposed as an MCP stdio server and powered by
+local **LanceDB semantic search**. Agents archive and query technical lessons across
+workspaces, giving them a persistent memory of what was already learned the hard way.
+
+Host-agnostic: it speaks plain MCP over stdio and works with any MCP client (Claude Code,
+Gemini CLI, Codex).
 
 ## Features
 
@@ -9,35 +14,54 @@ A cross-project technical knowledge management system for the Gemini CLI, now po
 - **Hierarchical Knowledge:** Supports `raw` observations and `synthesized` Best Practices with full provenance tracking.
 - **Proactive Wisdom:** Agents automatically check the archive for relevant patterns before proposing solutions.
 - **Recursive Audit:** Agents automatically trace the ancestry of synthesized rules (up to 3 levels deep) to ensure no contradictions.
-- **Admin Isolation:** Destructive tools (`update_lesson`, `delete_lesson`) are hidden by default and only available in a dedicated "Maintenance Mode."
+- **Admin Isolation:** Destructive tools (`update_lore`, `delete_lore`) are hidden by default and only available in a dedicated "Maintenance Mode."
 
 ## Prerequisites
 
-- [Node.js](https://nodejs.org/) (v18 or higher recommended)
-- [Gemini CLI](https://github.com/google/gemini-cli)
+- [Node.js](https://nodejs.org/) v18 or higher
+- An MCP client
 
 ## Installation
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/your-username/lore.git
-   cd lore
-   ```
+```bash
+git clone https://github.com/parijjana/lore.git
+cd lore
+npm install
+npm test          # self-contained; uses a throwaway archive
+```
 
-2. **Run the installer:**
+Register with Claude Code:
 
-   **Windows (PowerShell):**
-   ```powershell
-   ./install.ps1
-   ```
+```bash
+claude mcp add lore -s user -- node /absolute/path/to/lore/index.js
+```
 
-   **macOS / Linux:**
-   ```bash
-   chmod +x install.sh
-   ./install.sh
-   ```
+`install.sh` / `install.ps1` are **Gemini-CLI-specific** — they refuse to run without
+`~/.gemini/settings.json` and register the server under the key `lessons`. Use them only
+with Gemini CLI; every other host should register the command directly, as above.
 
-3. **Restart Gemini CLI.**
+## Where the archive lives
+
+| Path | What it is |
+| :--- | :--- |
+| `~/.lore/lore_archive.jsonl` | **The durable copy.** Append-only, human-readable, diffable. |
+| `~/.lore/lore.lance/` | Disposable vector index. `npm run reindex` rebuilds it from the JSONL. |
+
+Override the location with `LORE_ARCHIVE_PATH` (the `.lance` directory follows it). Back up
+the JSONL — losing it loses the archive; losing the `.lance` directory costs a reindex.
+
+## Seeding from a file-based lessons corpus
+
+`npm run harvest` imports Markdown lessons into the archive. It reads
+`~/code/projects/project_docs/lessons_learnt/` by default; override with `LESSONS_DIR`.
+
+```bash
+npm run harvest && npm run reindex
+```
+
+Imports are idempotent — ids derive from the filename, so re-running updates in place
+rather than duplicating. Imported documents are marked `synthesized`, since a hand-written
+lessons file is already a distilled standard rather than a raw observation.
 
 ## Usage
 
@@ -50,16 +74,18 @@ Interact with the archive naturally:
 
 To update or delete lessons, you must enable Admin Mode by setting an environment variable:
 
-1. Create a dedicated `admin-settings.json` (or use a temporary flag).
-2. Set `KNOWLEDGE_ADMIN_MODE=true` in your environment.
-3. The agent will now have access to `update_lesson` and `delete_lesson`.
+Set `KNOWLEDGE_ADMIN_MODE=true` in the server's environment; `update_lore` and
+`delete_lore` then appear in the tool list. They are hidden entirely when it is unset.
 
 ## Technical Details
 
 - **Database:** LanceDB (Serverless, local file-based).
 - **Embeddings:** Local CPU-based (Transformers.js).
-- **Backup:** A human-readable `lore_archive.jsonl` is maintained alongside the binary vector store.
+- **Backup:** A human-readable `lore_archive.jsonl` is maintained alongside the binary
+  vector store, and is the source of truth for `reindex.js`.
+- **Manifest:** `mcp-server.yaml` (schema v1) describes the server for a supervising hub.
+  Note the 30s health timeout: cold start loads the embedding model before serving.
 
 ## License
 
-MIT License - See [LICENSE](./LICENSE) for details.
+ISC License - See [LICENSE](./LICENSE) for details.
