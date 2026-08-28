@@ -251,7 +251,8 @@ You are connected to a "Lore" Knowledge Archive. Follow these rules:
 3. **Usage Mode**: Trust 'synthesized' lessons as the Current Standard.
 4. **Synthesis Mode**: When 5+ related findings accumulate, offer to consolidate them. During synthesis, use 'get_lore_ancestry' (depth 3) to identify and resolve any contradictions. **Pass 'author' with your own name when you archive the synthesized entry** — the raw findings keep the attribution of whoever observed them, and the synthesized entry records who did the distilling. That is what makes a promotion auditable after the fact.
 5. **Transparency**: Always mention project names and provenance counts when sharing Lore results.
-6. **Provenance**: Every entry carries 'host' (the machine that recorded it, captured automatically and not settable by you) and 'author' (who is responsible for the content). Filter on either via 'query_lore'. When two machines write one archive, 'host' is what makes a merged archive attributable.
+6. **Source of truth (interim, 2026-08-27)**: entries with 'origin: "file"' are imported from Markdown lessons files, which are still canonical until Telarch runs on both machines. Do NOT use 'update_lore' on them — edit the source file and re-run the importer. Entries with 'origin: "agent"' live only in Lore and are yours to maintain.
+7. **Provenance**: Every entry carries 'host' (the machine that recorded it, captured automatically and not settable by you) and 'author' (who is responsible for the content). Filter on either via 'query_lore'. When two machines write one archive, 'host' is what makes a merged archive attributable.
         `.trim();
         return { content: [{ type: "text", text: protocol }] };
     }

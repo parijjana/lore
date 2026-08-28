@@ -92,25 +92,43 @@ The reconciliation rules:
 Verified against a real two-machine divergence: both machines' findings survive, and a
 same-id edit on both sides collapses to the newer one without a conflict prompt.
 
-## Seeding from a file-based lessons corpus
+## Importing the file-based lessons corpora
 
-`npm run harvest` imports Markdown lessons into the archive. It reads
-`~/code/projects/project_docs/lessons_learnt/` by default; override with `LESSONS_DIR`.
+Lore is the intended **single source of truth** for engineering lessons. It is not there yet:
+the `lessons_learnt/` files stay canonical until Telarch is live and working on both
+machines, because until then nothing supervises Lore or guarantees it is running where a
+lesson gets written. Until that day the two coexist and this importer is the bridge — so it
+is built to be re-run, not run once.
 
 ```bash
 npm run harvest && npm run reindex
 ```
 
-Imports are idempotent — ids derive from the filename, so re-running updates in place
-rather than duplicating. Imported documents are marked `synthesized`, since a hand-written
-lessons file is already a distilled standard rather than a raw observation.
+Sources are **discovered, not configured** — absolute paths differ between machines, so a
+config file would need per-machine editing and would drift. The convention is:
 
-## Usage
+```
+<projects-root>/*/lessons_learnt/*.md
+<projects-root>/*/lessons_learned/*.md     # both spellings are in use
+```
 
-Interact with the archive naturally:
+`<projects-root>` defaults to `~/code/projects`; override with `LORE_PROJECTS_ROOT`. The
+project directory name becomes the entry's `project` (`project_docs` maps to
+`cross-project`).
 
-- *"Archive this fix for the TabController race condition to the global lessons repository."*
-- *"Based on our past projects, what is the best way to handle Flutter pagination?"* (The agent will perform a semantic search and return the synthesized best practice).
+What makes it safe to re-run, repeatedly, from any agent on either machine:
+
+| Property | Why it is needed |
+| :--- | :--- |
+| Ids namespaced by source (`sha1("<project>/<slug>")`) | `database_batching.md` is exactly the kind of filename two projects will both have. Keying on the filename alone lets one project silently overwrite another's lesson. |
+| Ids **not** host-prefixed | Both machines import the same corpus and must agree on one id per lesson, or every lesson lands once per machine. |
+| Stable across runs | Re-importing updates in place instead of duplicating. |
+| File-derived rows replaced wholesale | A renamed or deleted lesson file does not leave an orphan behind. |
+| `origin: "file"` vs `origin: "agent"` | The importer only ever touches rows it owns. Findings archived by an agent are never modified or removed. |
+| Removals reported, archive in git | A bad run is visible and revertible. |
+
+**Do not edit a file-derived entry inside Lore** (via `update_lore`) while the files are
+canonical — the next `harvest` will overwrite it. Edit the Markdown and re-import.
 
 ## Attribution
 
