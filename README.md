@@ -41,6 +41,10 @@ claude mcp add lore -s user -- node /absolute/path/to/lore/index.js
 `~/.gemini/settings.json` and register the server under the key `lessons`. Use them only
 with Gemini CLI; every other host should register the command directly, as above.
 
+> **Running Lore on more than one machine?** See
+> **[MULTI_SYSTEM_RUNBOOK.md](./MULTI_SYSTEM_RUNBOOK.md)** — setup per machine, the daily
+> loop, how concurrent archives from different machines reconcile, and recovery.
+
 ## Where the archive lives
 
 | Path | What it is |
@@ -50,16 +54,18 @@ with Gemini CLI; every other host should register the command directly, as above
 
 Override the location with `LORE_ARCHIVE_PATH` (the `.lance` directory follows it).
 
-`~/.lore/` is itself a git repo backed by the **private** `parijjana/lore-data`, which tracks
-the JSONL and ignores the index. Recovery from total loss:
+Keep `~/.lore/` in its own **private** repository, separate from this one — it holds the
+actual archive, which is a different asset from the tool that reads it. Track the JSONL;
+ignore the index. Recovery from total loss:
 
 ```bash
-git clone https://github.com/parijjana/lore-data.git ~/.lore
+git clone <your-private-data-repo> ~/.lore
 cd /path/to/lore && npm install && npm run reindex
 ```
 
-Verified 2026-08-27: a clone containing no `lore.lance/` reindexes to an archive that returns
-identical results. Losing the JSONL loses the archive; losing the index costs a reindex.
+Verified: a clone containing no `lore.lance/` reindexes to an archive that returns identical
+results. Losing the JSONL loses the archive; losing the index costs a reindex. See the
+[multi-system runbook](./MULTI_SYSTEM_RUNBOOK.md) for the full setup.
 
 ## Syncing between machines
 
