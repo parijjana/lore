@@ -18,6 +18,7 @@ try {
 }
 
 const { JSONL_PATH, LANCE_DIR } = require("./paths.js");
+const { hostName, defaultAuthor } = require("./identity.js");
 const ADMIN_MODE = process.env.KNOWLEDGE_ADMIN_MODE === 'true';
 
 let db, table, embedder;
@@ -39,6 +40,8 @@ async function init() {
             problem: "",
             solution: "",
             type: "raw",
+            host: "",
+            author: "",
             source_ids: ["none"],
             tags: ["none"],
             timestamp: new Date().toISOString()
@@ -83,7 +86,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           solution: { type: "string" },
           type: { type: "string", enum: ["raw", "synthesized"], default: "raw" },
           source_ids: { type: "array", items: { type: "string" } },
-          tags: { type: "array", items: { type: "string" } }
+          tags: { type: "array", items: { type: "string" } },
+          author: {
+            type: "string",
+            description: "Who is responsible for this finding. On a synthesized entry, "
+                       + "the synthesizer. Defaults to the archive owner; pass your own "
+                       + "name to take credit. The recording machine is captured "
+                       + "automatically and cannot be set here."
+          }
         },
         required: ["project", "category", "problem", "solution"],
       },
@@ -97,7 +107,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           query: { type: "string", description: "Search by meaning or intent." },
           category: { type: "string" },
           include_raw: { type: "boolean", default: false },
-          limit: { type: "number", default: 10 }
+          limit: { type: "number", default: 10 },
+          author: { type: "string", description: "Only findings attributed to this author." },
+          host: { type: "string", description: "Only findings recorded on this machine." }
         }
       },
     },
@@ -153,22 +165,34 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (name === "archive_lore") {
       const id = crypto.randomUUID();
       const timestamp = new Date().toISOString();
-      const lesson = { id, timestamp, ...args, source_ids: args.source_ids || [], type: args.type || "raw" };
+      const lesson = {
+          id, timestamp, ...args,
+          source_ids: args.source_ids || [],
+          type: args.type || "raw",
+          // Which machine wrote this. Never taken from the caller — the point is that it
+          // is trustworthy when two machines merge into one JSONL.
+          host: hostName(),
+          // Who is responsible for the content. On a synthesized entry this is the
+          // synthesizer, which is what makes the raw -> synthesized promotion auditable.
+          author: args.author || defaultAuthor(),
+      };
       fs.appendFileSync(JSONL_PATH, JSON.stringify(lesson) + "\n", "utf8");
       const combinedText = `${lesson.category} ${lesson.problem} ${lesson.solution} ${lesson.tags?.join(" ") || ""}`;
       const vector = await getEmbedding(combinedText);
       await table.add([{ ...lesson, vector, text: combinedText }]);
-      return { content: [{ type: "text", text: `Successfully archived ${lesson.type} lesson ${id}.` }] };
+      return { content: [{ type: "text", text: `Successfully archived ${lesson.type} lesson ${id} (author: ${lesson.author}, host: ${lesson.host}).` }] };
     }
 
     if (name === "query_lore") {
       const query = args.query || "";
       const limit = args.limit || 10;
-      // Category is filtered in the query, not after it: filtering a limited result
-      // set silently hides matches that sit deeper in the index.
-      const filter = args.category
-          ? `lower(category) = ${sqlString(args.category.toLowerCase())}`
-          : null;
+      // Filtered inside the query, not after it: filtering a limited result set
+      // silently hides matches that sit deeper in the index.
+      const clauses = [];
+      if (args.category) clauses.push(`lower(category) = ${sqlString(args.category.toLowerCase())}`);
+      if (args.author)   clauses.push(`lower(author) = ${sqlString(args.author.toLowerCase())}`);
+      if (args.host)     clauses.push(`lower(host) = ${sqlString(args.host.toLowerCase())}`);
+      const filter = clauses.length ? clauses.join(" AND ") : null;
       let builder;
       if (query) {
           const vector = await getEmbedding(query);
@@ -190,9 +214,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               return new Date(b.timestamp) - new Date(a.timestamp);
           })[0];
           const headline = (best.problem || "").split("\n")[0];
-          return { content: [{ type: "text", text: `PROACTIVE BEST PRACTICE FOUND:\n\n### [${(best.category || "general").toUpperCase()}] ${headline}\n\n${best.solution}\n\nProvenance: ${best.project}, derived from ${best.source_ids.length} sources. ID: ${best.id}` }] };
+          return { content: [{ type: "text", text: `PROACTIVE BEST PRACTICE FOUND:\n\n### [${(best.category || "general").toUpperCase()}] ${headline}\n\n${best.solution}\n\nProvenance: synthesized by ${best.author || "unknown"}, derived from ${best.source_ids.length} sources. ID: ${best.id}` }] };
       }
-      const output = results.map(r => `[${(r.type || "raw").toUpperCase()}] ${r.project}: ${(r.problem || "").substring(0, 100)}... (Score: ${r._distance ? (1 - r._distance).toFixed(2) : "N/A"}) ID: ${r.id}`).join("\n");
+      const output = results.map(r => `[${(r.type || "raw").toUpperCase()}] ${r.project}: ${(r.problem || "").substring(0, 100)}... (Score: ${r._distance ? (1 - r._distance).toFixed(2) : "N/A"}) by ${r.author || "unknown"}@${r.host || "unknown"} ID: ${r.id}`).join("\n");
       return { content: [{ type: "text", text: `Found ${results.length} semantic matches:\n\n${output}` }] };
     }
 
@@ -223,8 +247,9 @@ You are connected to a "Lore" Knowledge Archive. Follow these rules:
 1. **Bootstrap**: CALL THIS TOOL (get_lore_protocol) to remind yourself of your identity and instincts.
 2. **Proactive Lookup**: Before proposing architectures or fixing bugs, use 'query_lore' to ensure continuity with past breakthroughs.
 3. **Usage Mode**: Trust 'synthesized' lessons as the Current Standard.
-4. **Synthesis Mode**: When 5+ related findings accumulate, offer to consolidate them. During synthesis, use 'get_lore_ancestry' (depth 3) to identify and resolve any contradictions.
+4. **Synthesis Mode**: When 5+ related findings accumulate, offer to consolidate them. During synthesis, use 'get_lore_ancestry' (depth 3) to identify and resolve any contradictions. **Pass 'author' with your own name when you archive the synthesized entry** — the raw findings keep the attribution of whoever observed them, and the synthesized entry records who did the distilling. That is what makes a promotion auditable after the fact.
 5. **Transparency**: Always mention project names and provenance counts when sharing Lore results.
+6. **Provenance**: Every entry carries 'host' (the machine that recorded it, captured automatically and not settable by you) and 'author' (who is responsible for the content). Filter on either via 'query_lore'. When two machines write one archive, 'host' is what makes a merged archive attributable.
         `.trim();
         return { content: [{ type: "text", text: protocol }] };
     }
@@ -241,7 +266,17 @@ You are connected to a "Lore" Knowledge Archive. Follow these rules:
         const summary = Object.entries(stats).map(([cat, s]) => 
             `- **${cat.toUpperCase()}**: ${s.total} total (${s.raw} raw, ${s.synthesized} synthesized). ${s.raw >= 5 ? "️ Fragmentation High - Recommend Synthesis." : " Healthy"}`
         ).join("\n");
-        return { content: [{ type: "text", text: `Lore Health Status:\n\n${summary}` }] };
+
+        // The archive is written by more than one machine. A per-host count is how you
+        // notice that one of them stopped contributing, or that a merge dropped a side.
+        const tally = (key) => {
+            const t = {};
+            all.forEach(l => { const v = l[key] || "unattributed"; t[v] = (t[v] || 0) + 1; });
+            return Object.entries(t).sort((a, b) => b[1] - a[1])
+                     .map(([v, n]) => `- ${v}: ${n}`).join("\n");
+        };
+        const provenance = `Recorded on:\n${tally("host")}\n\nAttributed to:\n${tally("author")}`;
+        return { content: [{ type: "text", text: `Lore Health Status:\n\n${summary}\n\n${provenance}` }] };
     }
 
     if (name === "update_lore" && ADMIN_MODE) {

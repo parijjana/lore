@@ -46,6 +46,8 @@ async function reindex() {
             problem: String(lesson.problem || ""),
             solution: String(lesson.solution || ""),
             type: String(lesson.type || "raw"),
+            host: String(lesson.host || ""),
+            author: String(lesson.author || ""),
             source_ids: (lesson.source_ids || []).map(id => String(id)),
             timestamp: String(lesson.timestamp || new Date().toISOString()),
             tags: (lesson.tags || []).map(t => String(t))

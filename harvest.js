@@ -16,6 +16,7 @@ const path = require("path");
 const os = require("os");
 const crypto = require("crypto");
 const { JSONL_PATH } = require("./paths.js");
+const { hostName, defaultAuthor } = require("./identity.js");
 
 const LESSONS_DIR = process.env.LESSONS_DIR ||
     path.join(os.homedir(), "code", "projects", "project_docs", "lessons_learnt");
@@ -99,6 +100,10 @@ function parse(file) {
         // were written directly, not synthesized from archived raw entries.
         type: "synthesized",
         source_ids: [],
+        host: hostName(),
+        // These files were written by hand, so the synthesizer is the archive owner.
+        // Override with LORE_AUTHOR when importing someone else's corpus.
+        author: defaultAuthor(),
         tags: ["lessons_learnt", slug],
     };
 }

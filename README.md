@@ -12,6 +12,7 @@ Gemini CLI, Codex).
 - **Semantic Search:** Uses local CPU embeddings (`all-MiniLM-L6-v2`) to find lessons by *meaning* and *intent*, not just keywords.
 - **Cross-Project Memory:** Share insights between unrelated projects automatically.
 - **Hierarchical Knowledge:** Supports `raw` observations and `synthesized` Best Practices with full provenance tracking.
+- **Attribution:** Every entry records the machine that captured it and who is responsible for it, so a raw finding keeps its observer and a synthesized entry names its synthesizer.
 - **Proactive Wisdom:** Agents automatically check the archive for relevant patterns before proposing solutions.
 - **Recursive Audit:** Agents automatically trace the ancestry of synthesized rules (up to 3 levels deep) to ensure no contradictions.
 - **Admin Isolation:** Destructive tools (`update_lore`, `delete_lore`) are hidden by default and only available in a dedicated "Maintenance Mode."
@@ -82,6 +83,27 @@ Interact with the archive naturally:
 
 - *"Archive this fix for the TabController race condition to the global lessons repository."*
 - *"Based on our past projects, what is the best way to handle Flutter pagination?"* (The agent will perform a semantic search and return the synthesized best practice).
+
+## Attribution
+
+Every entry carries two provenance fields:
+
+| Field | Meaning | Set by |
+| :--- | :--- | :--- |
+| `host` | The machine that recorded the entry. | **Automatic.** Callers cannot set it — that is the point: it stays trustworthy when two machines merge into one archive. Override the detected name with `LORE_HOST`. |
+| `author` | Who is responsible for the content. On a `raw` finding, the observer; on a `synthesized` entry, **the synthesizer**. | The `author` argument to `archive_lore`. Defaults to `LORE_AUTHOR`, else `git config --global user.name`, else the OS username. |
+
+The split is what makes the raw → synthesized promotion auditable: the raw findings keep the
+attribution of whoever observed them, while the synthesized entry names whoever distilled it.
+An agent that consolidates should pass its own name:
+
+```json
+{ "type": "synthesized", "author": "claude-opus-5", "source_ids": ["...", "..."] }
+```
+
+`query_lore` accepts `author` and `host` filters, and `get_lore_health` breaks the archive
+down by both — which is how you notice that one machine has stopped contributing, or that a
+merge silently dropped one side.
 
 ## Admin Mode (Maintenance)
 

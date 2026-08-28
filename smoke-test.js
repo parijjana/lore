@@ -51,6 +51,32 @@ const { StdioClientTransport } = require("@modelcontextprotocol/sdk/client/stdio
   const inj = await call("query_lore", { query: "x", category: "a' OR '1'='1" });
   check("quote in category cannot break out of the filter", /Found 0 /.test(inj), inj);
 
+  // --- provenance ---------------------------------------------------------------
+  const { hostName, defaultAuthor } = require("./identity.js");
+  const arch = await call("archive_lore", { project: "x", category: "prov", problem: "p", solution: "s" });
+  check("archive stamps host and author by default",
+        arch.includes(hostName()) && arch.includes(defaultAuthor()), arch);
+
+  const credited = await call("archive_lore", {
+      project: "x", category: "prov2", problem: "p2", solution: "s2",
+      type: "synthesized", author: "claude-opus-5" });
+  check("synthesizer can take credit via author", credited.includes("claude-opus-5"), credited);
+
+  // host identifies the recording machine, so a caller must not be able to set it.
+  const spoof = await call("archive_lore", {
+      project: "x", category: "prov3", problem: "p3", solution: "s3", host: "not-my-machine" });
+  check("host cannot be spoofed by the caller",
+        spoof.includes(hostName()) && !spoof.includes("not-my-machine"), spoof);
+
+  const byAuthor = await call("query_lore", { query: "p2", author: "claude-opus-5" });
+  check("filter by author", /Found 1 /.test(byAuthor) || /PROACTIVE/.test(byAuthor), byAuthor);
+
+  const byHost = await call("query_lore", { query: "p", host: hostName(), include_raw: true });
+  check("filter by host matches this machine", !/Found 0 /.test(byHost), byHost);
+
+  const otherHost = await call("query_lore", { query: "p", host: "some-other-box", include_raw: true });
+  check("filter by an absent host returns nothing", /Found 0 /.test(otherHost), otherHost);
+
   const health = await call("get_lore_health", {});
   check("health reports both categories", /BUILD/.test(health) && /SIGNING/.test(health), health);
 
