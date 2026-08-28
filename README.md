@@ -61,8 +61,36 @@ cd /path/to/lore && npm install && npm run reindex
 Verified 2026-08-27: a clone containing no `lore.lance/` reindexes to an archive that returns
 identical results. Losing the JSONL loses the archive; losing the index costs a reindex.
 
-Writes from `archive_lore` land in the JSONL but are **not** committed automatically — commit
-and push `~/.lore` to keep the backup current.
+## Syncing between machines
+
+`archive_lore` appends to the JSONL but does not commit, so the backup drifts as soon as an
+agent archives anything. `npm run sync` closes that and the merge question underneath it:
+
+```bash
+npm run sync            # normalize, commit, pull, reindex if changed, push
+npm run sync -- --no-push
+```
+
+It does, in order: deduplicate by id and sort (making the byte order canonical, so the next
+merge has less to conflict over) → commit → `git pull --no-rebase` → normalize again → rebuild
+the vector index **only if the JSONL actually changed** → push.
+
+The reconciliation rules:
+
+- `.gitattributes` marks the archive `merge=union`. Two machines archiving different findings
+  is not a conflict, it is two findings, so a conflicting hunk keeps both sides.
+- Union merges can leave the same id twice, which happens when an entry was rewritten in
+  place rather than appended (`harvest.js` does this). Sync deduplicates by id afterwards,
+  **keeping the newest timestamp** — a heuristic, since clocks across two machines are not
+  perfectly ordered.
+- A line that will not parse **aborts the run** with the line number, writing nothing and
+  exiting non-zero. Silently dropping a line you cannot parse is data loss dressed as a
+  cleanup.
+- Reindex is triggered by a content hash in `.lore-index-hash` (untracked), not mtime, which
+  a checkout perturbs freely.
+
+Verified against a real two-machine divergence: both machines' findings survive, and a
+same-id edit on both sides collapses to the newer one without a conflict prompt.
 
 ## Seeding from a file-based lessons corpus
 

@@ -6,7 +6,8 @@
   "scripts": {
     "test": "node smoke-test.js",
     "reindex": "node reindex.js",
-    "harvest": "node harvest.js"
+    "harvest": "node harvest.js",
+    "sync": "node sync.js"
   },
   "keywords": [],
   "author": "",
