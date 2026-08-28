@@ -47,8 +47,21 @@ with Gemini CLI; every other host should register the command directly, as above
 | `~/.lore/lore_archive.jsonl` | **The durable copy.** Append-only, human-readable, diffable. |
 | `~/.lore/lore.lance/` | Disposable vector index. `npm run reindex` rebuilds it from the JSONL. |
 
-Override the location with `LORE_ARCHIVE_PATH` (the `.lance` directory follows it). Back up
-the JSONL — losing it loses the archive; losing the `.lance` directory costs a reindex.
+Override the location with `LORE_ARCHIVE_PATH` (the `.lance` directory follows it).
+
+`~/.lore/` is itself a git repo backed by the **private** `parijjana/lore-data`, which tracks
+the JSONL and ignores the index. Recovery from total loss:
+
+```bash
+git clone https://github.com/parijjana/lore-data.git ~/.lore
+cd /path/to/lore && npm install && npm run reindex
+```
+
+Verified 2026-08-27: a clone containing no `lore.lance/` reindexes to an archive that returns
+identical results. Losing the JSONL loses the archive; losing the index costs a reindex.
+
+Writes from `archive_lore` land in the JSONL but are **not** committed automatically — commit
+and push `~/.lore` to keep the backup current.
 
 ## Seeding from a file-based lessons corpus
 
