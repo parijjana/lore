@@ -71,6 +71,8 @@ git clone <your-private-data-repo> ~/.lore     # or: mkdir ~/.lore && git init
 cat > ~/.lore/.gitattributes <<'EOF'
 lore_archive.jsonl merge=union
 lore_archive.jsonl -text
+lore_superseded.jsonl merge=union
+lore_superseded.jsonl -text
 EOF
 cat > ~/.lore/.gitignore <<'EOF'
 lore.lance/
@@ -193,7 +195,9 @@ talk to each other. Four properties keep that reconcilable:
 3. **Dedup by id after every merge.** Union can leave the same id twice — but only for
    *content-addressed* ids, which are deliberately identical across machines (see below).
    Sync collapses those, newest timestamp winning. That last part is a heuristic: clocks on
-   two machines are not perfectly ordered.
+   two machines are not perfectly ordered — so **the losing version is appended to
+   `lore_superseded.jsonl`, never dropped.** Sync also refuses to write at all if any id
+   would vanish from the archive.
 4. **Canonical order.** Entries are sorted by id after every sync, so both machines converge
    on the same byte order and the next merge has far less to conflict over.
 

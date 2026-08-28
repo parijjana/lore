@@ -19,6 +19,7 @@ try {
 
 const { JSONL_PATH, LANCE_DIR } = require("./paths.js");
 const { hostName, defaultAuthor, hostPrefix } = require("./identity.js");
+const { supersede } = require("./superseded.js");
 const ADMIN_MODE = process.env.KNOWLEDGE_ADMIN_MODE === 'true';
 
 let db, table, embedder;
@@ -283,19 +284,37 @@ You are connected to a "Lore" Knowledge Archive. Follow these rules:
     }
 
     if (name === "update_lore" && ADMIN_MODE) {
-        await table.update(args.updates, `id = ${sqlString(args.id)}`);
         const all = readJsonlBackup();
-        const updated = all.map(l => l.id === args.id ? { ...l, ...args.updates } : l);
+        const previous = all.find(l => l.id === args.id);
+        if (!previous) throw new Error(`No entry with id ${args.id}.`);
+        // Keep the pre-image. An edit is not a reason to lose what was there before.
+        supersede(previous, "update_lore: replaced by an edited version");
+
+        const merged = { ...previous, ...args.updates };
+        // Replace the row rather than table.update(): its values are parsed as SQL
+        // expressions (a plain string throws), and it would not recompute the embedding —
+        // so an edited problem/solution would still be found by its OLD text.
+        const combinedText = `${merged.category} ${merged.problem} ${merged.solution} ${merged.tags?.join(" ") || ""}`;
+        const vector = await getEmbedding(combinedText);
+        await table.delete(`id = ${sqlString(args.id)}`);
+        await table.add([{ ...merged, vector, text: combinedText }]);
+
+        const updated = all.map(l => l.id === args.id ? merged : l);
         fs.writeFileSync(JSONL_PATH, updated.map(l => JSON.stringify(l)).join("\n") + "\n");
-        return { content: [{ type: "text", text: `Lesson ${args.id} updated.` }] };
+        return { content: [{ type: "text", text: `Lesson ${args.id} updated. Previous version kept in lore_superseded.jsonl.` }] };
     }
 
     if (name === "delete_lore" && ADMIN_MODE) {
-        await table.delete(`id = ${sqlString(args.id)}`);
         const all = readJsonlBackup();
+        const doomed = all.find(l => l.id === args.id);
+        if (!doomed) throw new Error(`No entry with id ${args.id}.`);
+        // Retired from the live archive, not destroyed: the content stays recoverable so a
+        // lesson can be re-synthesized later from the raw material.
+        supersede(doomed, "delete_lore: removed from the live archive");
+        await table.delete(`id = ${sqlString(args.id)}`);
         const filtered = all.filter(l => l.id !== args.id);
         fs.writeFileSync(JSONL_PATH, filtered.map(l => JSON.stringify(l)).join("\n") + "\n");
-        return { content: [{ type: "text", text: `Lesson ${args.id} deleted.` }] };
+        return { content: [{ type: "text", text: `Lesson ${args.id} removed from the live archive. Content kept in lore_superseded.jsonl.` }] };
     }
 
     throw new Error(`Unknown tool or unauthorized: ${name}`);

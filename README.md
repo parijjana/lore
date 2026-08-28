@@ -50,7 +50,25 @@ with Gemini CLI; every other host should register the command directly, as above
 | Path | What it is |
 | :--- | :--- |
 | `~/.lore/lore_archive.jsonl` | **The durable copy.** Append-only, human-readable, diffable. |
+| `~/.lore/lore_superseded.jsonl` | **Append-only record of every retired entry.** Track it too. |
 | `~/.lore/lore.lance/` | Disposable vector index. `npm run reindex` rebuilds it from the JSONL. |
+
+### Nothing is ever destroyed
+
+The archive is raw material — a lesson can always be re-synthesized later, but only if the
+data is still there. So no operation removes content outright. Anything that stops being
+live is appended to `lore_superseded.jsonl` first, with the reason:
+
+| Operation | What is preserved |
+| :--- | :--- |
+| Sync dedup (two machines edited one entry) | The losing version. "Newest wins" is a heuristic — clocks across machines are not ordered — which is exactly why the loser is kept. |
+| `update_lore` | The full pre-image, before the edit. |
+| `delete_lore` | The entry itself. It leaves the live archive; the content stays. |
+| `npm run harvest` | Nothing is deleted at all without `--prune`. |
+
+`sync` additionally refuses to write if any id would vanish from the archive, and aborts
+without touching anything if a line will not parse. The data repo is version-controlled on
+top of all this, so a bad state is also recoverable by reverting a commit.
 
 Override the location with `LORE_ARCHIVE_PATH` (the `.lance` directory follows it).
 

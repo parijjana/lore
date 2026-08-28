@@ -81,6 +81,32 @@ const { StdioClientTransport } = require("@modelcontextprotocol/sdk/client/stdio
   const otherHost = await call("query_lore", { query: "p", host: "some-other-box", include_raw: true });
   check("filter by an absent host returns nothing", /Found 0 /.test(otherHost), otherHost);
 
+  // --- nothing is ever destroyed -------------------------------------------------------
+  const fsx = require("fs"), pathx = require("path");
+  const supPath = pathx.join(home, "lore_superseded.jsonl");
+  const readSup = () => fsx.existsSync(supPath)
+      ? fsx.readFileSync(supPath, "utf8").split("\n").filter(Boolean).map(JSON.parse) : [];
+
+  const doomedTxt = await call("archive_lore", { project: "x", category: "doomed", problem: "delete me", solution: "gone?" });
+  const doomedId = doomedTxt.match(/lesson (\S+) /)[1];
+  await call("delete_lore", { id: doomedId });
+  const afterDelete = readSup();
+  check("delete_lore preserves the entry",
+        afterDelete.some(r => r.entry.id === doomedId && r.entry.solution === "gone?"),
+        JSON.stringify(afterDelete.slice(-1)));
+  const goneFromLive = await call("query_lore", { query: "delete me", category: "doomed", include_raw: true });
+  check("deleted entry is out of the live archive", /Found 0 /.test(goneFromLive), goneFromLive);
+
+  const editTxt = await call("archive_lore", { project: "x", category: "edited", problem: "before", solution: "original text" });
+  const editId = editTxt.match(/lesson (\S+) /)[1];
+  await call("update_lore", { id: editId, updates: { solution: "replacement text" } });
+  check("update_lore preserves the previous version",
+        readSup().some(r => r.entry.id === editId && r.entry.solution === "original text"),
+        JSON.stringify(readSup().slice(-1)));
+  // The embedding must be recomputed, or the edited entry stays findable by its old text.
+  const reEmbedded = await call("query_lore", { query: "replacement text", category: "edited", include_raw: true });
+  check("update_lore re-embeds the edited entry", /Found 1 /.test(reEmbedded), reEmbedded);
+
   const health = await call("get_lore_health", {});
   check("health reports both categories", /BUILD/.test(health) && /SIGNING/.test(health), health);
 

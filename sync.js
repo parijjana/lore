@@ -10,6 +10,10 @@
 //     driver (.gitattributes) is the right resolution for a conflicting hunk: keep both
 //     sides rather than asking a human to pick. Two machines archiving different findings
 //     is not a conflict, it is just two findings.
+//   * dedup never destroys the losing version — it is appended to lore_superseded.jsonl
+//     first. The archive is raw material for later synthesis, so the only acceptable
+//     resolution of "two versions of one entry" is to keep one live and keep the other
+//     recoverable.
 //   * union merges can leave the same id twice. Ids minted by archive_lore are
 //     host-prefixed and cannot collide, so this only happens for CONTENT-addressed ids —
 //     when an entry was rewritten in place rather than appended, or when both machines
@@ -28,6 +32,7 @@ const path = require("path");
 const crypto = require("crypto");
 const { execFileSync } = require("child_process");
 const { JSONL_PATH } = require("./paths.js");
+const { supersede } = require("./superseded.js");
 
 const ARCHIVE_DIR = path.dirname(JSONL_PATH);
 const HASH_FILE = path.join(ARCHIVE_DIR, ".lore-index-hash");
@@ -87,20 +92,34 @@ function normalize() {
     });
 
     const byId = new Map();
-    let duplicates = 0;
+    const displaced = [];
     for (const e of entries) {
         const id = e.id;
         if (!id) { console.error("FATAL: an entry has no id. Nothing was written."); process.exit(1); }
         const prev = byId.get(id);
         if (!prev) { byId.set(id, e); continue; }
-        duplicates++;
         // Newest wins. Clocks across two machines are not perfectly ordered, so this is a
-        // heuristic — it is recorded here rather than hidden in a one-liner.
-        const keep = new Date(e.timestamp || 0) >= new Date(prev.timestamp || 0) ? e : prev;
-        byId.set(id, keep);
+        // heuristic — which is exactly why the loser is preserved rather than dropped.
+        const eNewer = new Date(e.timestamp || 0) >= new Date(prev.timestamp || 0);
+        byId.set(id, eNewer ? e : prev);
+        displaced.push(eNewer ? prev : e);
     }
+    const duplicates = displaced.length;
+    if (duplicates) supersede(displaced, "dedup: another version of this id won on timestamp");
 
     const sorted = [...byId.values()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+
+    // Nothing in sync is allowed to make an id disappear. Dedup collapses versions of the
+    // same id; it must never drop an id entirely. If that ever happens it is a bug, and
+    // the right response is to write nothing.
+    const before = new Set(entries.map(e => e.id));
+    const after = new Set(sorted.map(e => e.id));
+    const lost = [...before].filter(id => !after.has(id));
+    if (lost.length) {
+        console.error(`FATAL: ${lost.length} id(s) would vanish: ${lost.slice(0, 5).join(", ")}`);
+        console.error("Nothing was written. This is a bug — the archive is unchanged.");
+        process.exit(1);
+    }
     const out = sorted.map(e => JSON.stringify(e)).join("\n") + "\n";
     const changed = out !== raw;
     if (changed) fs.writeFileSync(JSONL_PATH, out, "utf8");
