@@ -10,9 +10,11 @@
 //     driver (.gitattributes) is the right resolution for a conflicting hunk: keep both
 //     sides rather than asking a human to pick. Two machines archiving different findings
 //     is not a conflict, it is just two findings.
-//   * union merges can leave the same id twice — that happens whenever an entry was
-//     rewritten in place rather than appended (harvest.js does exactly that). So after
-//     any merge the file is deduplicated by id, keeping the newest timestamp.
+//   * union merges can leave the same id twice. Ids minted by archive_lore are
+//     host-prefixed and cannot collide, so this only happens for CONTENT-addressed ids —
+//     when an entry was rewritten in place rather than appended, or when both machines
+//     imported the same source file (harvest.js does both, by design). So after any merge
+//     the file is deduplicated by id, keeping the newest timestamp.
 //   * the file is then sorted by id, which makes the order canonical. Both machines
 //     converge on the same byte order, so the NEXT merge has far less to conflict over.
 //   * a malformed line aborts the whole run. Silently dropping a line you cannot parse

@@ -68,6 +68,10 @@ const { StdioClientTransport } = require("@modelcontextprotocol/sdk/client/stdio
   check("host cannot be spoofed by the caller",
         spoof.includes(hostName()) && !spoof.includes("not-my-machine"), spoof);
 
+  // Minted ids carry a host prefix so two machines can never collide.
+  const { hostPrefix } = require("./identity.js");
+  check("minted id is host-prefixed", new RegExp(`lesson ${hostPrefix()}-`).test(arch), arch);
+
   const byAuthor = await call("query_lore", { query: "p2", author: "claude-opus-5" });
   check("filter by author", /Found 1 /.test(byAuthor) || /PROACTIVE/.test(byAuthor), byAuthor);
 

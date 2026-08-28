@@ -88,7 +88,10 @@ function parse(file) {
                      render(secs) || "See the source document.";
 
     return {
-        // Deterministic id from the slug — makes re-running this importer idempotent.
+        // Deterministic id from the slug, and deliberately NOT host-prefixed: both
+        // machines import the same lessons_learnt corpus, and they must agree on one id
+        // per lesson or the shared corpus lands twice. Idempotent across re-runs and
+        // across machines for the same reason.
         id: "lesson-" + crypto.createHash("sha1").update(slug).digest("hex").slice(0, 12),
         timestamp: new Date(fs.statSync(file).mtime).toISOString(),
         project: "cross-project",

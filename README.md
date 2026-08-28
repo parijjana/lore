@@ -121,7 +121,16 @@ Every entry carries two provenance fields:
 | `host` | The machine that recorded the entry. | **Automatic.** Callers cannot set it — that is the point: it stays trustworthy when two machines merge into one archive. Override the detected name with `LORE_HOST`. |
 | `author` | Who is responsible for the content. On a `raw` finding, the observer; on a `synthesized` entry, **the synthesizer**. | The `author` argument to `archive_lore`. Defaults to `LORE_AUTHOR`, else `git config --global user.name`, else the OS username. |
 
-The split is what makes the raw → synthesized promotion auditable: the raw findings keep the
+Ids minted by `archive_lore` are prefixed with a short hash of the machine name
+(`bef6f4-1badf8c9-...`), so two machines can never mint the same id and an id says where it
+came from even when read in isolation.
+
+**Ids derived from content are deliberately not prefixed.** `harvest.js` derives its ids from
+the source filename precisely so both machines importing the same lessons file agree on one
+id — that is what keeps a shared corpus from landing once per machine. Prefixing those would
+turn one lesson into N copies, which is the opposite of what the prefix is for.
+
+The author/host split is what makes the raw → synthesized promotion auditable: the raw findings keep the
 attribution of whoever observed them, while the synthesized entry names whoever distilled it.
 An agent that consolidates should pass its own name:
 

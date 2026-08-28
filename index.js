@@ -18,7 +18,7 @@ try {
 }
 
 const { JSONL_PATH, LANCE_DIR } = require("./paths.js");
-const { hostName, defaultAuthor } = require("./identity.js");
+const { hostName, defaultAuthor, hostPrefix } = require("./identity.js");
 const ADMIN_MODE = process.env.KNOWLEDGE_ADMIN_MODE === 'true';
 
 let db, table, embedder;
@@ -163,7 +163,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   try {
     if (name === "archive_lore") {
-      const id = crypto.randomUUID();
+      // Host-prefixed so two machines can never mint the same id, and so an id says
+      // where it came from on its own. See identity.js for why harvest.js opts out.
+      const id = `${hostPrefix()}-${crypto.randomUUID()}`;
       const timestamp = new Date().toISOString();
       const lesson = {
           id, timestamp, ...args,

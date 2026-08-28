@@ -14,6 +14,7 @@
 // wants the credit has to say so.
 
 const os = require("os");
+const crypto = require("crypto");
 const { execFileSync } = require("child_process");
 
 function hostName() {
@@ -37,4 +38,19 @@ function defaultAuthor() {
     return cachedAuthor;
 }
 
-module.exports = { hostName, defaultAuthor };
+// Short, stable hash of the machine name, prefixed onto ids that this machine MINTS
+// (archive_lore). Two machines can then never mint the same id, and an id is
+// self-describing about where it came from even if the row is read in isolation.
+//
+// Hashed rather than used raw so the prefix has a fixed width and no characters that
+// need escaping in a SQL filter or a filename.
+//
+// Deliberately NOT applied to content-addressed ids. harvest.js derives its ids from the
+// source filename precisely so that both machines importing the same lessons file agree
+// on one id — that is what keeps the shared corpus from landing twice. Prefixing those
+// would turn one lesson into one-per-machine, which is the opposite of the goal.
+function hostPrefix() {
+    return crypto.createHash("sha1").update(hostName()).digest("hex").slice(0, 6);
+}
+
+module.exports = { hostName, defaultAuthor, hostPrefix };
