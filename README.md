@@ -129,7 +129,7 @@ What makes it safe to re-run, repeatedly, from any agent on either machine:
 | Ids namespaced by source (`sha1("<project>/<slug>")`) | `database_batching.md` is exactly the kind of filename two projects will both have. Keying on the filename alone lets one project silently overwrite another's lesson. |
 | Ids **not** host-prefixed | Both machines import the same corpus and must agree on one id per lesson, or every lesson lands once per machine. |
 | Stable across runs | Re-importing updates in place instead of duplicating. |
-| File-derived rows replaced wholesale | A renamed or deleted lesson file does not leave an orphan behind. |
+| Never deletes by default | A lesson with no source file on this machine is reported and **kept**. "Deleted upstream" and "this machine doesn't have that project" are indistinguishable locally, and guessing wrong destroys another machine's work and syncs the deletion. Use `--prune` when you know the deletions are real, `--dry-run` to preview. |
 | `origin: "file"` vs `origin: "agent"` | The importer only ever touches rows it owns. Findings archived by an agent are never modified or removed. |
 | Removals reported, archive in git | A bad run is visible and revertible. |
 

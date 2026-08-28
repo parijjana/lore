@@ -30,6 +30,29 @@ Committing it would bloat history for no recovery value.
 
 ---
 
+## Before you start
+
+Four things this document cannot tell you, because they differ per person and per machine.
+Get them straight first — each one is a place a setup run stops dead.
+
+1. **The two repository URLs.** This document names neither (see the split above). If you
+   are an agent doing this on someone's behalf and were not given them, ask, or look them
+   up — e.g. `gh repo list <account>`. Do not guess.
+2. **Which shell.** Every command below is POSIX shell. On Windows use **Git Bash**, which
+   ships with Git for Windows. In PowerShell the heredocs (`<<'EOF'`) and `~` expansion do
+   not work; if you must use PowerShell, write those files with an editor and use absolute
+   paths everywhere.
+3. **Node 18+ and git must be on PATH.** Check: `node --version && git --version`.
+4. **Where this machine keeps its projects**, if you intend to import lessons files. The
+   importer defaults to `~/code/projects` and machines disagree about this — set
+   `LORE_PROJECTS_ROOT` if yours differs. Skip entirely if this is not the first machine.
+
+**The first command touching the model downloads ~90 MB** (`Xenova/all-MiniLM-L6-v2`), so
+`npm test` and the first `reindex` need network and are slow. Everything afterwards is local
+and offline.
+
+---
+
 ## First machine
 
 ```bash
@@ -67,8 +90,7 @@ Those two `.gitattributes` lines are load-bearing; see [Why the merge works](#wh
 
 ## Every additional machine
 
-Identical, minus the seeding — the archive already exists, so pull it rather than
-regenerating it.
+Shorter than the first, and the differences matter:
 
 ```bash
 git clone <this-repo> ~/code/lore
@@ -78,11 +100,23 @@ git clone <your-private-data-repo> ~/.lore
 
 npm run reindex        # build THIS machine's local vector index from the JSONL
 npm run sync           # confirm the loop works end to end
-claude mcp add lore -s user -- node ~/code/lore/index.js
+
+# absolute path — `~` is not expanded inside this argument on every shell
+claude mcp add lore -s user -- node "$HOME/code/lore/index.js"
 ```
 
-`npm run reindex` is not optional on a new machine. The index is gitignored, so a fresh clone
-has the archive but no vectors, and `query_lore` would start from empty.
+**Do not run `npm run harvest` here, and do not create `.gitattributes` or `.gitignore`.**
+Both are steps for the *first* machine only:
+
+- The archive already exists. `harvest` imports lessons **files**, and this machine's set of
+  lessons files is probably not the same as the machine that seeded the archive. Importing
+  is safe — it only adds and updates — but it is pointless work unless this machine is where
+  you actually edit lessons files. It is never necessary to get Lore running.
+- `.gitattributes` and `.gitignore` arrive with the clone. Rewriting them by hand risks
+  dropping the `-text` line, which is what stops Git for Windows corrupting the merge.
+
+`npm run reindex` **is** required. The index is gitignored, so a fresh clone has the archive
+and no vectors, and `query_lore` would return nothing until you build them.
 
 ### Verify the machine is actually participating
 
@@ -169,7 +203,7 @@ Entries also carry `origin`, which decides who may modify them:
 
 | `origin` | Written by | Rule |
 | :--- | :--- | :--- |
-| `file` | `npm run harvest`, from a Markdown lessons file | The importer owns these and replaces them wholesale. Edit the source file, not the entry. |
+| `file` | `npm run harvest`, from a Markdown lessons file | The importer owns these and updates them in place. Edit the source file, not the entry. It never deletes them unless you pass `--prune`. |
 | `agent` | `archive_lore` | Live only in Lore. The importer never touches them. |
 
 ---

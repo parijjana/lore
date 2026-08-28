@@ -18,9 +18,15 @@
 //   * Ids are NOT host-prefixed, unlike the ones archive_lore mints. Both machines
 //     import the same corpus and must agree on one id per lesson, or every lesson lands
 //     once per machine. See identity.js.
-//   * File-derived entries are replaced wholesale, so renames and deletions do not leave
-//     orphans behind. Entries archived by an agent (origin: "agent") are never touched.
-//     Every removal is reported, and the archive is in git, so a bad run is revertible.
+//   * IT NEVER DELETES BY DEFAULT. Importing adds and updates; that is all. A lesson in
+//     the archive with no matching file on this machine is REPORTED, not removed, because
+//     the two explanations are indistinguishable from here: the file was deleted, or this
+//     machine's checkout simply does not have it (a project it never cloned, or a clone
+//     that is behind). Guessing wrong deletes another machine's work and syncs the
+//     deletion upstream. Pass `--prune` when you know the deletions are real.
+//   * Entries archived by an agent (origin: "agent") are never touched at all.
+//
+// `--dry-run` reports what would change and writes nothing.
 
 const fs = require("fs");
 const path = require("path");
@@ -29,6 +35,8 @@ const crypto = require("crypto");
 const { JSONL_PATH } = require("./paths.js");
 const { hostName, defaultAuthor } = require("./identity.js");
 
+const DRY_RUN = process.argv.includes("--dry-run");
+const PRUNE = process.argv.includes("--prune");
 const PROJECTS_ROOT = process.env.LORE_PROJECTS_ROOT ||
     path.join(os.homedir(), "code", "projects");
 
@@ -180,23 +188,39 @@ function main() {
         : [];
 
     const agentEntries = existing.filter(e => !isFileDerived(e));
-    const orphans = existing.filter(e => isFileDerived(e) && !importedIds.has(e.id));
+    const unmatched = existing.filter(e => isFileDerived(e) && !importedIds.has(e.id));
     const updated = existing.filter(e => isFileDerived(e) && importedIds.has(e.id)).length;
-
-    fs.mkdirSync(path.dirname(JSONL_PATH), { recursive: true });
-    fs.writeFileSync(JSONL_PATH,
-        [...agentEntries, ...imported].map(l => JSON.stringify(l)).join("\n") + "\n", "utf8");
+    const kept = PRUNE ? [] : unmatched;
 
     console.log(`\n${imported.length} file lesson(s) from ${sources.length} source(s): ` +
                 `${updated} updated, ${imported.length - updated} new.`);
-    if (orphans.length) {
-        console.log(`\nRemoved ${orphans.length} orphaned file lesson(s) — their source file was ` +
-                    `renamed, deleted, or re-keyed:`);
-        for (const o of orphans) console.log(`  ${o.id}  ${o.source_path || "(legacy, no source_path)"}`);
-        console.log(`The archive is in git; revert the commit if that was not intended.`);
+
+    if (unmatched.length) {
+        const projects = [...new Set(unmatched.map(e => e.project))].sort().join(", ");
+        if (PRUNE) {
+            console.log(`\n--prune: ${DRY_RUN ? "would remove" : "removing"} ${unmatched.length} ` +
+                        `lesson(s) with no source file here, from: ${projects}`);
+            for (const o of unmatched) console.log(`  ${o.id}  ${o.source_path || "(no source_path)"}`);
+            console.log(`The archive is in git; revert the commit if that was not intended.`);
+        } else {
+            console.log(`\n${unmatched.length} lesson(s) in the archive have no source file on this ` +
+                        `machine, from: ${projects}`);
+            console.log(`KEPT. They may have been deleted upstream, or this machine may simply not ` +
+                        `have those files — that is indistinguishable from here, and guessing wrong ` +
+                        `destroys another machine's work.`);
+            console.log(`If you know the deletions are real, re-run with --prune.`);
+        }
     }
-    console.log(`\nKept ${agentEntries.length} agent-archived entr(y|ies) untouched.`);
-    console.log(`Written to ${JSONL_PATH}. Now run: npm run reindex`);
+    console.log(`Kept ${agentEntries.length} agent-archived entr(y|ies) untouched.`);
+
+    if (DRY_RUN) {
+        console.log(`\n--dry-run: nothing was written.`);
+        return;
+    }
+    fs.mkdirSync(path.dirname(JSONL_PATH), { recursive: true });
+    fs.writeFileSync(JSONL_PATH,
+        [...agentEntries, ...kept, ...imported].map(l => JSON.stringify(l)).join("\n") + "\n", "utf8");
+    console.log(`\nWritten to ${JSONL_PATH}. Now run: npm run reindex`);
 }
 
 main();
