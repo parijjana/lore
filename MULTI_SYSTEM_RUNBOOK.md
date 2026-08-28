@@ -118,8 +118,17 @@ corrupted archive. Backgrounding it is fine — it is the recommended shape, sin
 has to rebuild the index is slow enough to be worth not waiting on:
 
 ```bash
-(cd ~/code/lore && npm run sync >> ~/.lore/sync.log 2>&1 &)
+node ~/code/lore/sync.js >> ~/.lore/sync.log 2>&1
 ```
+
+Invoke `sync.js` directly rather than through `npm run` when the caller's working
+directory is not the repo — `npm run` resolves scripts from the cwd and fails elsewhere.
+Each run stamps the log with a timestamp.
+
+In Claude Code, wire it to the `SessionStart` and `Stop` hooks with `"async": true` so it
+never blocks a session. Add `sync.log` to the data repo's `.gitignore`: the log is written
+into the archive directory, so otherwise every run dirties the repo and the next run
+commits the log.
 
 ### Platform notes
 

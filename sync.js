@@ -126,6 +126,10 @@ function main() {
         process.exit(1);
     }
 
+    // Runs are appended to a log by the session hooks, so stamp each one — otherwise
+    // the log is an undated wall of identical-looking output.
+    console.log(`\n===== lore sync ${new Date().toISOString()} =====`);
+
     acquireLock();
 
     step("Normalizing local archive");
