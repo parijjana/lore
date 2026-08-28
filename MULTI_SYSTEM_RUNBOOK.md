@@ -43,6 +43,9 @@ Get them straight first — each one is a place a setup run stops dead.
    not work; if you must use PowerShell, write those files with an editor and use absolute
    paths everywhere.
 3. **Node 18+ and git must be on PATH.** Check: `node --version && git --version`.
+   The data repo is **private**, so this machine also needs credentials that can read *and
+   push* to it — `gh auth login`, or an SSH key on the account. A clone that succeeds is not
+   proof of push access; `npm run sync` is where it would fail.
 4. **Where this machine keeps its projects**, if you intend to import lessons files. The
    importer defaults to `~/code/projects` and machines disagree about this — set
    `LORE_PROJECTS_ROOT` if yours differs. Skip entirely if this is not the first machine.

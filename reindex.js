@@ -62,6 +62,13 @@ async function reindex() {
     }
 
     await db.createTable("lessons", data);
+
+    // Record what the index was built from, so `sync` does not immediately rebuild it.
+    // Without this a fresh machine reindexes twice: once here, once on its first sync.
+    const crypto = require("crypto");
+    const hash = crypto.createHash("sha256").update(fs.readFileSync(JSONL_PATH)).digest("hex");
+    fs.writeFileSync(path.join(path.dirname(JSONL_PATH), ".lore-index-hash"), hash + "\n", "utf8");
+
     console.log("Re-indexing complete!");
 }
 
