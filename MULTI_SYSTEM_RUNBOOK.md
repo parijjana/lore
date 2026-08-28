@@ -112,6 +112,15 @@ commit → pull → normalize → reindex only if the archive changed → push.
 `archive_lore` writes to the JSONL immediately but does **not** commit, so until you sync,
 a finding exists on one machine only.
 
+Sync is safe to run from a hook or a scheduler. It takes a lock and stands down if another
+run is already in progress, so overlapping invocations cost a skipped run rather than a
+corrupted archive. Backgrounding it is fine — it is the recommended shape, since a run that
+has to rebuild the index is slow enough to be worth not waiting on:
+
+```bash
+(cd ~/code/lore && npm run sync >> ~/.lore/sync.log 2>&1 &)
+```
+
 ### Platform notes
 
 - **Windows.** Git for Windows defaults to `core.autocrlf=true`. The `-text` attribute above
@@ -170,3 +179,4 @@ recoverable with `git revert` and `npm run reindex`.
 | An entry you edited in Lore reverted | It was `origin: file`; harvest replaced it. Edit the Markdown source instead. |
 | Index disagrees with the archive | `npm run reindex`. The index is always disposable. |
 | Total loss of a machine | Clone both repos, `npm run reindex`. Nothing else is machine-specific. |
+| `Another sync is already running` | Expected when syncs overlap. Harmless — the next run does the work. A lock older than 15 minutes is treated as stale and cleared. |

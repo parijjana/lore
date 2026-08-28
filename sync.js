@@ -31,7 +31,32 @@ const { JSONL_PATH } = require("./paths.js");
 
 const ARCHIVE_DIR = path.dirname(JSONL_PATH);
 const HASH_FILE = path.join(ARCHIVE_DIR, ".lore-index-hash");
+const LOCK_FILE = path.join(ARCHIVE_DIR, ".lore-sync.lock");
 const PUSH = !process.argv.includes("--no-push");
+const STALE_LOCK_MS = 15 * 60 * 1000;
+
+// Sync is safe to invoke from a hook, which means it can be invoked while an earlier run
+// is still going. Two concurrent runs would interleave a rewrite of the archive with a
+// git operation on it, so take a lock and simply stand down if another holds it — a
+// skipped sync costs nothing, the next one picks up the same work.
+function acquireLock() {
+    try {
+        const age = Date.now() - fs.statSync(LOCK_FILE).mtimeMs;
+        if (age < STALE_LOCK_MS) {
+            console.log(`Another sync is already running (lock held ${Math.round(age / 1000)}s). Standing down.`);
+            process.exit(0);
+        }
+        console.log("Removing a stale lock from an interrupted run.");
+        fs.unlinkSync(LOCK_FILE);
+    } catch (e) {
+        if (e.code !== "ENOENT") throw e;
+    }
+    fs.writeFileSync(LOCK_FILE, `${process.pid}\n`, { flag: "wx" });
+    const release = () => { try { fs.unlinkSync(LOCK_FILE); } catch (e) {} };
+    process.on("exit", release);
+    process.on("SIGINT", () => { release(); process.exit(130); });
+    process.on("SIGTERM", () => { release(); process.exit(143); });
+}
 
 function git(args, opts = {}) {
     return execFileSync("git", args, {
@@ -100,6 +125,8 @@ function main() {
         console.error("Set it up with:  git init && git remote add origin <private repo>");
         process.exit(1);
     }
+
+    acquireLock();
 
     step("Normalizing local archive");
     let n = normalize();
